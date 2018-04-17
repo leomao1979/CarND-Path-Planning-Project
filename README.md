@@ -1,6 +1,10 @@
 # CarND-Path-Planning-Project
 Self-Driving Car Engineer Nanodegree Program
-   
+
+[//]: # (Image References)
+
+[distance_without_incident]: ./images/distance_without_incident.png "Distance without incident"
+
 ### Simulator.
 You can download the Term3 Simulator which contains the Path Planning Project from the [releases tab (https://github.com/udacity/self-driving-car-sim/releases).
 
@@ -64,77 +68,155 @@ the path has processed since last time.
 
 A really helpful resource for doing this project and creating smooth trajectories was using http://kluge.in-chemnitz.de/opensource/spline/, the spline function is in a single hearder file is really easy to use.
 
----
+## Rubric Points
 
-## Dependencies
+[rubric points](https://review.udacity.com/#!/rubrics/1020/view)
 
-* cmake >= 3.5
-  * All OSes: [click here for installation instructions](https://cmake.org/install/)
-* make >= 4.1
-  * Linux: make is installed by default on most Linux distros
-  * Mac: [install Xcode command line tools to get make](https://developer.apple.com/xcode/features/)
-  * Windows: [Click here for installation instructions](http://gnuwin32.sourceforge.net/packages/make.htm)
-* gcc/g++ >= 5.4
-  * Linux: gcc / g++ is installed by default on most Linux distros
-  * Mac: same deal as make - [install Xcode command line tools]((https://developer.apple.com/xcode/features/)
-  * Windows: recommend using [MinGW](http://www.mingw.org/)
-* [uWebSockets](https://github.com/uWebSockets/uWebSockets)
-  * Run either `install-mac.sh` or `install-ubuntu.sh`.
-  * If you install from source, checkout to commit `e94b6e1`, i.e.
-    ```
-    git clone https://github.com/uWebSockets/uWebSockets 
-    cd uWebSockets
-    git checkout e94b6e1
-    ```
+### The code compiles correctly
 
-## Editor Settings
+Code compiles with `cmake` and `make` without errors.
 
-We've purposefully kept editor configuration files out of this repo in order to
-keep it as simple and environment agnostic as possible. However, we recommend
-using the following settings:
+### The car is able to drive at least 4.32 miles without incident
 
-* indent using spaces
-* set tab width to 2 spaces (keeps the matrices in source code aligned)
+Yes, the car can drive much more than 4.32 miles without incident. 
 
-## Code Style
+![Distance without incident][distance_without_incident]
 
-Please (do your best to) stick to [Google's C++ style guide](https://google.github.io/styleguide/cppguide.html).
+### The car drives according to the speed limit
 
-## Project Instructions and Rubric
+Yes, the car strictly follows speed limit. The maximum speed it drives is set to 49.5 mph.
 
-Note: regardless of the changes you make, your project must be buildable using
-cmake and make!
+### Max Acceleration and Jerk are not Exceeded
 
+Yes, max acceleration and jerk are not exceeded. The warning never shows.
 
-## Call for IDE Profiles Pull Requests
+### Car does not have collisions
 
-Help your fellow students!
+No collision happens.
 
-We decided to create Makefiles with cmake to keep this project as platform
-agnostic as possible. Similarly, we omitted IDE profiles in order to ensure
-that students don't feel pressured to use one IDE or another.
+### The car stays in its lane, except for the time between changing lanes
 
-However! I'd love to help people get up and running with their IDEs of choice.
-If you've created a profile for an IDE that you think other students would
-appreciate, we'd love to have you add the requisite profile files and
-instructions to ide_profiles/. For example if you wanted to add a VS Code
-profile, you'd add:
+Yes, the car stays in lane except for changing lanes.
 
-* /ide_profiles/vscode/.vscode
-* /ide_profiles/vscode/README.md
+### The car is able to change lanes
 
-The README should explain what the profile does, how to take advantage of it,
-and how to install it.
+The car will change lane smoothly when it is behind a slower vehicle and safe to change.
 
-Frankly, I've never been involved in a project with multiple IDE profiles
-before. I believe the best way to handle this would be to keep them out of the
-repo root to avoid clutter. My expectation is that most profiles will include
-instructions to copy files to a new location to get picked up by the IDE, but
-that's just a guess.
+## Reflection
 
-One last note here: regardless of the IDE used, every submitted project must
-still be compilable with cmake and make./
+### Prediction
 
-## How to write a README
-A well written README file can enhance your project and portfolio.  Develop your abilities to create professional README files by completing [this free course](https://www.udacity.com/course/writing-readmes--ud777).
+The sensor fusion contains all the information (id, x, y, vx, vy, s, d) about cars on the same side of ego vehicle. The velocity "vx", "vy" and "s" are used to predict where the car will be in the future.
 
+The getVehicleAhead() and getVehicleBehind() use prediction to find vechiles ahead and behind (main.cpp, lines 167 to 213).
+
+```
+    for (int i=0; i<sensor_fusion.size(); i++) {
+        double i_d = sensor_fusion[i][6];
+        if (i_d >= lane * 4 && i_d < (lane + 1) * 4) {
+            // same lane
+            double i_vx = sensor_fusion[i][3];
+            double i_vy = sensor_fusion[i][4];
+            double check_v = sqrt(i_vx*i_vx + i_vy*i_vy);
+            double i_s = sensor_fusion[i][5];
+            double check_s = i_s + pred_time * check_v;
+            if (check_s > s && check_s < min_s) {
+                min_s = check_s;
+                result.clear();
+                result.push_back(check_v);
+                result.push_back(check_s);
+            }
+        }
+    }
+
+```
+
+### Behavior Planning
+
+This part is to decide what to do next. With current state and sensor fusion data, calculate velocity and lane on which the car shall drive.
+
+When changing lane, the car will slow down when it is too close to vehicle ahead on the same lane, or the change-to lane (main.cpp, lines 336 to 356).
+
+```
+    if (car_lane != next_lane) {
+        // Changing lane. Slow down if it is too close with the vehicle ahead in either current lane, or change-to lane
+        bool shall_slowdown = false;
+        if (vehicle_ahead.size() > 0) {
+            double v = vehicle_ahead[0];
+            double s = vehicle_ahead[1];
+            if (s - end_path_s <= MINIMUM_BUFFER_ZONE && car_speed > v) {
+                shall_slowdown = true;
+            }
+        }
+        if (!shall_slowdown) {
+            vector<double> samelane_vehicle_ahead = getVehicleAhead(sensor_fusion, car_lane, end_path_s, pred_time);
+            if (samelane_vehicle_ahead[1] - end_path_s <= MINIMUM_BUFFER_ZONE && car_speed > samelane_vehicle_ahead[0]) {
+                shall_slowdown = true;
+            }
+        }
+        if (shall_slowdown) {
+            ref_velocity -= default_acceleration;
+        }
+        cout << "Changing lane from lane #" << car_lane << " to lane #" << next_lane << ". ref_velocity: " << ref_velocity << endl;
+    }
+```
+
+If not changing lane, increase velocity if there is no vehicle ahead, or it is far enough (main.cpp, lines 357 to 365).
+
+```
+    if (vehicle_ahead.size() == 0) {
+        // No vehicle ahead
+        ref_velocity += default_acceleration;
+    } else {
+        double v = vehicle_ahead[0];
+        double s = vehicle_ahead[1];
+        if (s - end_path_s > DEFAULT_BUFFER_ZONE) {
+            ref_velocity += default_acceleration;
+        }
+    }
+```
+
+If the car is too close to vehicle ahead, check whether it is safe to change lane. If yes, find the better one. Otherwise, keep lane and slow down (main.cpp, lines 365 to 372).
+
+```
+    if (car_speed > v) {
+        int lane_to_change = findLaneToChange(sensor_fusion, car_lane, end_path_s, pred_time);
+        if (lane_to_change != -1) {
+            next_lane = lane_to_change;
+            cout << "car_lane: " << car_lane << "; next_lane: " << next_lane << endl;
+        } else {
+            ref_velocity -= default_acceleration;
+        }
+    }
+```
+
+### Trajectory Generation
+
+The previous path points left over from last cycle will be used when generate trajectory, and new way points will be appended until it has 50 total points (main.cpp, lines 425 to 448). Using information from the previous path ensures that there is a smooth transition from cycle to cycle. 
+
+```
+    // Insert previous path points left over from last cycle
+    for(int i = 0; i < prev_size; i++) {
+        next_x_vals.push_back(previous_path_x[i]);
+        next_y_vals.push_back(previous_path_y[i]);
+    }
+    
+    // Append new way points
+    double target_x = 30.0;
+    double target_y = s(target_x);
+    double target_dist = sqrt(target_x * target_x + target_y * target_y);
+    double N = target_dist / (0.02 * ref_velocity);
+    double step_len = target_dist / N;
+    for(int i = 1; i <= 50 - prev_size; i++)
+    {
+        double x_point = i * step_len;
+        double y_point = s(x_point);
+        // Transform to global coordinate system
+        double x_transformed = x_point * cos(ref_yaw) - y_point * sin(ref_yaw);
+        double y_transformed = x_point * sin(ref_yaw) + y_point * cos(ref_yaw);
+        x_transformed += ref_x;
+        y_transformed += ref_y;
+        next_x_vals.push_back(x_transformed);
+        next_y_vals.push_back(y_transformed);
+    }
+```

@@ -422,11 +422,13 @@ int main() {
                         tk::spline s;
                         s.set_points(ptsx, ptsy);
                         
+                        // Insert previous path points left over from last cycle
                         for(int i = 0; i < prev_size; i++) {
                             next_x_vals.push_back(previous_path_x[i]);
                             next_y_vals.push_back(previous_path_y[i]);
                         }
                         
+                        // Append new way points
                         double target_x = 30.0;
                         double target_y = s(target_x);
                         double target_dist = sqrt(target_x * target_x + target_y * target_y);
@@ -436,6 +438,7 @@ int main() {
                         {
                             double x_point = i * step_len;
                             double y_point = s(x_point);
+                            // Transform to global coordinate system
                             double x_transformed = x_point * cos(ref_yaw) - y_point * sin(ref_yaw);
                             double y_transformed = x_point * sin(ref_yaw) + y_point * cos(ref_yaw);
                             x_transformed += ref_x;
